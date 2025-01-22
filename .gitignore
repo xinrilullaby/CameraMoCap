@@ -1,2 +1,12 @@
 # ignore the build dir
 build/
+
+#ignore vscode dirs
+.vc/
+.vs/
+.vscode/
+
+#ignore executables and intermediates
+*.exe
+*.obj
+*.pdb

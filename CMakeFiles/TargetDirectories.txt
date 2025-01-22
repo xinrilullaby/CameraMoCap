@@ -1,0 +1,3 @@
+C:/Users/dima/Developer/CameraMoCap/CMakeFiles/ALL_BUILD.dir
+C:/Users/dima/Developer/CameraMoCap/CMakeFiles/ZERO_CHECK.dir
+C:/Users/dima/Developer/CameraMoCap/src/CMakeFiles/main.dir
