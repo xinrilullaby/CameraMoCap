@@ -13,6 +13,7 @@ extern "C" {
 #include <magic_debug.h>
 #include <err_codes.h>
 #include <user_alerts.h>
+#include <loader.h>
 // Libraries for the CL linker
 #pragma comment(lib, "glew32s.lib")
 #pragma comment(lib, "user32.lib") 
@@ -23,7 +24,6 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
 int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine, int nCmdShow) {
     // Internal vars and bufs
     char* debugMessageBuffer = (char*)malloc(sizeof(char) * CAMERAMOCAP_DEBUGBUF_SZ);  // Buffer for debug messages
-
     // Register the window class.
     const wchar_t   CLASS_NAME[]    = L"Sample Window Class";
     WNDCLASS        wc              = { };
@@ -31,7 +31,6 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
     wc.hInstance                    = hInstance;
     wc.lpszClassName                = CLASS_NAME;
     RegisterClass(&wc);
-
     // Create the window.
     HWND hwnd = CreateWindowEx(
         0,                              // Optional window styles.
@@ -52,11 +51,9 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
         return ERR_NULL_HWND_RETURNED;
 
     ShowWindow(hwnd, nCmdShow);
-
     // Get GDI device context
     HDC hdc = GetDC(hwnd);
     wglMakeCurrent(hdc, NULL);
-    
     // Set pixel format on device descriptor
     // before creating a rendering context
     PIXELFORMATDESCRIPTOR pfd =
@@ -85,42 +82,9 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
     if (!SetPixelFormat(hdc, iPixelFormat, &pfd)) {
         return ERR_COULDNT_SET_PIXELFORMAT;
     }
-    // temp context for loading extensions
-    HGLRC tempGLContext = wglCreateContext(hdc);
-    if (tempGLContext == NULL) {
-        WCHAR buffer[128];
-        swprintf_s(buffer, L"Error %u", GetLastError());
-        // Print message box with the error
-        MessageBoxW(
-            hwnd,
-            L"Couldn't create OpenGL context",
-            buffer,
-            MB_OK
-        );
-        // Let's ignore this error and try moving on
-        return ERR_COULDNT_CREATE_OPENGL_CONTEXT;
-    }
-    log_info("Created extension-wrangling context");
-    log_info("Last GL error %s", reinterpret_cast<const char*>(glewGetErrorString(glGetError())));
-
-    wglMakeCurrent(hdc, tempGLContext);
-    log_info("Temporary context was made current");
-
-    GLenum glewInitResult = glewInit();
-    glutInit(__p___argc(), __argv);
-
-    if (glewInitResult != GLEW_OK) {
-        MessageBoxA(
-            hwnd,
-            "Couldn't initialize glew!",
-            "Error",
-            MB_OK | MB_ICONERROR
-        );
-        log_error("GLEW couldn't load (%)", glewGetErrorString(glewInitResult));
-        return ERR_GLEW_COULDNT_LOAD;
-    }
-
-    // Recreate GL contet with extensions
+    // loader.h
+    wrangleExtensions(hwnd);
+    // Recreate GL context with extensions
     int attribs[] =
     {
         WGL_CONTEXT_MAJOR_VERSION_ARB, 3,
@@ -139,21 +103,8 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
         );
         return ERR_COULDNT_CREATE_OPENGL_CONTEXT;
     }
-    // Reset and remove the temp GL context
-    wglMakeCurrent(NULL, NULL);
-    wglDeleteContext(tempGLContext);
     // Make the new context current
     wglMakeCurrent(hdc, hGLContext);
-
-    // Reading and compiling shader files
-    // vars
-    GLint   vertShaderCompResult;
-    GLint   fragShaderCompResult;
-    GLint   vertShaderInfoLogSize = 0;
-    GLint   fragShaderInfoLogSize = 0;
-    GLchar* vertShaderInfoLog;
-    GLchar* fragShaderInfoLog;
-
     // Check availability of shader source files
     if (
         !_access("testshader.frag", 0) == 0 ||
@@ -167,98 +118,14 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
             MB_OK | MB_ICONERROR
         );
     } 
-    // Read vertex shader from file
-    FILE* fpvertshader = fopen("testshader.vert", "r");
-    fseek(fpvertshader, 0L, SEEK_END); // Go to EOF
-    size_t fpvertshader_size = ftell(fpvertshader);
-    fseek(fpvertshader, 0L, SEEK_SET);
-    char* pvertshader_source = (char *)calloc(fpvertshader_size + 1, sizeof(char) ); // Allocate C string of file size
-    pvertshader_source[fpvertshader_size] = '\0';
-    rewind(fpvertshader); // Go to beginning of file
-    fread(pvertshader_source, sizeof(char), fpvertshader_size, fpvertshader);
-
-    // Compile vertex shader object
-    GLuint vertexShader = glCreateShader(GL_VERTEX_SHADER);
-    glShaderSource(vertexShader, 1, &pvertshader_source, NULL);
-    glCompileShader(vertexShader);
-    
-    debugMessageBuffer = strcat(debugMessageBuffer, "vertex shader compilation finished\n");
-    glGetShaderiv(vertexShader, GL_COMPILE_STATUS, &vertShaderCompResult);
-    if (vertShaderCompResult == GL_FALSE) {
-        // Print to own debug logs
-        debugMessageBuffer = strcat(debugMessageBuffer, "vertex shader compilation failed\n");
-        debugMessageBuffer = strcat(
-            debugMessageBuffer, 
-            reinterpret_cast<const char *>(
-                glewGetErrorString(glGetError())
-            )
-        );
-        // Query OpenGL for info logs
-        glGetShaderiv(vertexShader, GL_INFO_LOG_LENGTH, &vertShaderInfoLogSize);
-        // Allocate memory for this diva
-        vertShaderInfoLog = (GLchar*)malloc(sizeof(char) * vertShaderInfoLogSize);
-        glGetShaderInfoLog(
-            vertexShader, 
-            vertShaderInfoLogSize, 
-            &vertShaderInfoLogSize, 
-            vertShaderInfoLog
-        );
-        log_error(vertShaderInfoLog);
-        log_error("Failed to compile vertex shader, dumping shader source below:");
-        log_debug(pvertshader_source);
-    } else {
-        log_info("Vertex shader compiled successfully");
-    }
-    log_info(pvertshader_source);
-    free(pvertshader_source);
-
-    FILE* fpfragshader = fopen("testshader.frag", "r");
-    fseek(fpfragshader, 0L, SEEK_END); ; // Go to EOF
-    size_t fpfragshader_size = ftell(fpfragshader);
-    fseek(fpfragshader, 0, SEEK_SET);
-    char* pfragshader_source = (char *)calloc(fpfragshader_size + 1, sizeof(char)); // Allocate C string of file size
-    rewind(fpfragshader); // Go to beginning of file
-    fread(pfragshader_source, sizeof(char), fpfragshader_size, fpfragshader);
-
-    unsigned int fragmentShader;
-    fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);    
-    glShaderSource(fragmentShader, 1, &pfragshader_source, NULL);
-    glCompileShader(fragmentShader);
-    debugMessageBuffer = strcat(debugMessageBuffer, "fragment shader compilation finished\n");
-    glGetShaderiv(fragmentShader, GL_COMPILE_STATUS, &fragShaderCompResult);
-    if (fragShaderCompResult != GL_TRUE) {
-        // Print to own debug logs
-        debugMessageBuffer = strcat(debugMessageBuffer, "fragment shader compilation failed\n");
-        debugMessageBuffer = strcat(
-            debugMessageBuffer, 
-            reinterpret_cast<const char *>(
-                glewGetErrorString(glGetError())
-            )
-        );
-        // Query OpenGL for info logs
-        glGetShaderiv(fragmentShader, GL_INFO_LOG_LENGTH, &fragShaderInfoLogSize);
-        // Allocate memory for this diva
-        fragShaderInfoLog = (GLchar*)malloc(sizeof(char) * fragShaderInfoLogSize);
-        glGetShaderInfoLog(
-            fragmentShader, 
-            fragShaderInfoLogSize, 
-            &fragShaderInfoLogSize, 
-            fragShaderInfoLog
-        );
-        log_error(fragShaderInfoLog);
-        log_error("Failed to compile fragment shader, dumping shader source below:");
-        log_debug(pfragshader_source);
-    } else {
-        log_info("Fragment shader compiled successfully");
-    }
-    log_info(pfragshader_source);
-    free(pfragshader_source);
-
+    // loadShader(const char* path, GLuint type) reads and compiles shaders
+    GLuint vertexShader     = loadShader("testshader.vert", GL_VERTEX_SHADER);
+    GLuint fragmentShader   = loadShader("testshader.frag", GL_FRAGMENT_SHADER);
     GLuint shaderProgram;
     shaderProgram = glCreateProgram();
-    if (vertShaderCompResult == GL_TRUE)
+    if (vertexShader != 0)
         glAttachShader(shaderProgram, vertexShader);
-    if (fragShaderCompResult == GL_TRUE)
+    if (fragmentShader != 0)
         glAttachShader(shaderProgram, fragmentShader);
     glLinkProgram(shaderProgram);
     
@@ -284,13 +151,10 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
         log_error("Failed to compile fragment shader, dumping shader source below:");
         free(programInfoLog);
     }
-
     glValidateProgram(shaderProgram);
-
     glDeleteShader(vertexShader);
     glDeleteShader(fragmentShader);
-    
-
+    // Vertex data
     GLfloat vertices[] = {
         -0.5f,  -0.5f,  0.0f,
          0.5f,  -0.5f,  0.0f,
@@ -298,10 +162,8 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
     };  
 
     GLuint VBO, VAO;
-
     glGenVertexArrays(1, &VAO);
     glGenBuffers(1, &VBO);
-
     glBindVertexArray(VAO);
 
     glBindBuffer(GL_ARRAY_BUFFER, VBO);
@@ -319,7 +181,6 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
 
     glBindBuffer(GL_ARRAY_BUFFER, 0);
     glBindVertexArray(0);
-    
 
     MSG msg = { };
     while (GetMessage(&msg, NULL, 0, 0) > 0)

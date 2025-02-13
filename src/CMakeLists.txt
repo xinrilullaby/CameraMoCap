@@ -7,6 +7,7 @@ add_executable(main WIN32
     user_alerts.c
     util.c
     log.c
+    loader.c
 )
 
 if (MSVC)
