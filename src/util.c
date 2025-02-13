@@ -1,9 +1,9 @@
 #pragma once
 #include <util.h>
 
-void printFramebuffer(const char* msg) {
-    glColor3f(1.0, 0.0, 0.0);
-    glRasterPos2f(0.1, 0.1);
+void printToFramebuffer(const char* msg) {
+    // glColor3f(1.0, 0.0, 1.0);
+    glRasterPos2f(-0.9, -0.9);
 
     int len, i;
     len = (int)strlen(msg);

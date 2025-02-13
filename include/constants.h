@@ -1,0 +1,17 @@
+#define APPLICATION_VERSION "0.0.2"
+
+#ifndef UNICODE
+#define UNICODE
+#endif
+
+#ifndef MAGICDBG_DEBUG
+#define MAGICDBG_DEBUG
+#endif
+
+#ifndef CAMERAMOCAP_DEBUGBUF_SZ
+#define CAMERAMOCAP_DEBUGBUF_SZ 32768
+#endif
+
+#ifndef _CRT_SECURE_NO_WARNINGS
+#define _CRT_SECURE_NO_WARNINGS
+#endif

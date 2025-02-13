@@ -5,6 +5,6 @@
 #include <string.h>
 
 
-EXTERN_C void printFramebuffer(const char*);
+EXTERN_C void printToFramebuffer(const char*);
 
 
